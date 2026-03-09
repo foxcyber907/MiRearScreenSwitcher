@@ -30,13 +30,13 @@ android {
 
     defaultConfig {
         applicationId = "com.tgwgroup.MiRearScreenSwitcher"
-        minSdk = 24  // Shizuku需要最低24
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
     
-    // Shizuku需要
+    // AIDL support
     buildFeatures {
         aidl = true
     }
@@ -82,7 +82,4 @@ flutter {
 }
 
 dependencies {
-    // Shizuku API
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

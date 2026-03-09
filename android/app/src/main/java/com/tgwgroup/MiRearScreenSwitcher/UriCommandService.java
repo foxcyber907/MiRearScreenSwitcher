@@ -28,7 +28,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
-import rikka.shizuku.Shizuku;
 
 /**
  * V2.6: URI命令处理服务
@@ -39,12 +38,7 @@ public class UriCommandService extends IntentService {
     private static final String TAG = "UriCommandService";
 
     private ITaskService taskService;
-    private final Shizuku.UserServiceArgs serviceArgs = new Shizuku.UserServiceArgs(
-            new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
 
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -129,21 +123,12 @@ public class UriCommandService extends IntentService {
     }
 
     private void bindTaskService() {
-        if (taskService != null)
+        if (taskServiceBound)
             return;
 
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.e(TAG, "Shizuku不可用");
-                return;
-            }
-
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "无Shizuku权限");
-                return;
-            }
-
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "绑定TaskService失败", e);
         }
@@ -795,12 +780,13 @@ public class UriCommandService extends IntentService {
     public void onDestroy() {
         super.onDestroy();
 
-        if (taskService != null) {
+        if (taskServiceBound) {
             try {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+                unbindService(taskServiceConnection);
             } catch (Exception e) {
                 Log.e(TAG, "解绑TaskService失败", e);
             }
+            taskServiceBound = false;
             taskService = null;
         }
     }

@@ -26,7 +26,6 @@ import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
 import android.util.Log;
 import android.widget.Toast;
-import rikka.shizuku.Shizuku;
 
 /**
  * Quick Settings Tile - 切换至背屏
@@ -39,12 +38,7 @@ public class SwitchToRearTileService extends TileService {
     private static String lastMovedTask = null; // 格式: "packageName:taskId"
 
     private ITaskService taskService;
-    private final Shizuku.UserServiceArgs serviceArgs = new Shizuku.UserServiceArgs(
-            new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
 
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -128,22 +122,13 @@ public class SwitchToRearTileService extends TileService {
     }
 
     private void bindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             return;
         }
 
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.e(TAG, "Shizuku not available");
-                return;
-            }
-
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "No Shizuku permission");
-                return;
-            }
-
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            android.content.Intent intent = new android.content.Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, android.content.Context.BIND_AUTO_CREATE);
 
         } catch (Exception e) {
             Log.e(TAG, "Failed to bind TaskService", e);
@@ -151,12 +136,13 @@ public class SwitchToRearTileService extends TileService {
     }
 
     private void unbindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             try {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+                unbindService(taskServiceConnection);
             } catch (Exception e) {
                 Log.e(TAG, "Error unbinding TaskService", e);
             }
+            taskServiceBound = false;
             taskService = null;
         }
     }

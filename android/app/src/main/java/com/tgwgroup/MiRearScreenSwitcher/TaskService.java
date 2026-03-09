@@ -22,7 +22,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 /**
- * 运行在Shizuku进程中的服务，具有shell权限
+ * 特权服务，通过su获取root权限执行命令
+ * 由RootTaskService作为本地绑定Service宿主
  */
 public class TaskService extends ITaskService.Stub {
     private static final String TAG = "TaskService";
@@ -42,8 +43,8 @@ public class TaskService extends ITaskService.Stub {
     public String getCurrentForegroundApp() throws RemoteException {
         try {
 
-            // 执行am stack list，在Shizuku进程中具有shell权限
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "am stack list");
+            // 执行am stack list，通过su获取root权限
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "am stack list");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             
@@ -102,8 +103,8 @@ public class TaskService extends ITaskService.Stub {
     public int getTaskIdByPackage(String packageName) throws RemoteException {
         try {
 
-            // 执行am stack list，在Shizuku进程中具有shell权限
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "am stack list");
+            // 执行am stack list，通过su获取root权限
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "am stack list");
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -145,13 +146,13 @@ public class TaskService extends ITaskService.Stub {
             // 先获取包名
             String packageName = getPackageNameFromTaskId(taskId);
 
-            // 执行service call命令，在Shizuku进程中具有shell权限
-            // 注意：Android系统的每个显示器都有独立的状态栏（SystemUI�?
-            // 当应用切换到背屏时，它会显示背屏的状态栏，这是系统默认行�?
-            // 要保持主屏状态栏可见需要系统级修改，无法通过应用层实�?
+            // 执行service call命令，通过su获取root权限
+            // 注意：Android系统的每个显示器都有独立的状态栏（SystemUI）
+            // 当应用切换到背屏时，它会显示背屏的状态栏，这是系统默认行为
+            // 要保持主屏状态栏可见需要系统级修改，无法通过应用层实现
             String cmd = "service call activity_task 50 i32 " + taskId + " i32 " + displayId;
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -188,7 +189,7 @@ public class TaskService extends ITaskService.Stub {
      */
     private String getPackageNameFromTaskId(int taskId) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "am stack list");
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "am stack list");
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -231,7 +232,7 @@ public class TaskService extends ITaskService.Stub {
             String cmd = "am start --display " + displayId + 
                         " -n com.tgwgroup.MiRearScreenSwitcher/.RearScreenWakeupActivity";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             pb.redirectErrorStream(true);
             Process process = pb.start();
             
@@ -268,7 +269,7 @@ public class TaskService extends ITaskService.Stub {
             // 强制停止进程（进程可能会自动重启，需要持续杀死）
             String killCmd = "am force-stop com.xiaomi.subscreencenter";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", killCmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", killCmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -296,7 +297,7 @@ public class TaskService extends ITaskService.Stub {
             // 检查进程是否在运行
             String cmd = "ps -A | grep com.xiaomi.subscreencenter";
             
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -334,7 +335,7 @@ public class TaskService extends ITaskService.Stub {
             // 强制停止进程
             String cmd = "am force-stop com.xiaomi.subscreencenter";
             
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -356,7 +357,7 @@ public class TaskService extends ITaskService.Stub {
             // 启动SubScreenLauncher（进程会自动启动）
             String startCmd = "am start --display 1 -n com.xiaomi.subscreencenter/.SubScreenLauncher";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", startCmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", startCmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -396,7 +397,7 @@ public class TaskService extends ITaskService.Stub {
             // 方法1: 展开主屏状态栏（不完全展开，只是激活）
             String expandCmd = "cmd statusbar expand-settings";
 
-            ProcessBuilder pb1 = new ProcessBuilder("sh", "-c", expandCmd);
+            ProcessBuilder pb1 = new ProcessBuilder("su", "-c", expandCmd);
             Process process1 = pb1.start();
             int exitCode1 = process1.waitFor();
             
@@ -406,7 +407,7 @@ public class TaskService extends ITaskService.Stub {
                 
                 // 立即收起
                 String collapseCmd = "cmd statusbar collapse";
-                ProcessBuilder pb2 = new ProcessBuilder("sh", "-c", collapseCmd);
+                ProcessBuilder pb2 = new ProcessBuilder("su", "-c", collapseCmd);
                 Process process2 = pb2.start();
                 int exitCode2 = process2.waitFor();
                 
@@ -423,7 +424,7 @@ public class TaskService extends ITaskService.Stub {
             // 设置主屏display为默�?
             String wmCmd = "wm set-display-type 0 home";
 
-            ProcessBuilder pb3 = new ProcessBuilder("sh", "-c", wmCmd);
+            ProcessBuilder pb3 = new ProcessBuilder("su", "-c", wmCmd);
             Process process3 = pb3.start();
             
             BufferedReader reader3 = new BufferedReader(
@@ -444,7 +445,7 @@ public class TaskService extends ITaskService.Stub {
             
             // 方法3: 检查当前状态栏位置
 
-            ProcessBuilder pb4 = new ProcessBuilder("sh", "-c", "dumpsys window displays | grep -A20 'Display: 0'");
+            ProcessBuilder pb4 = new ProcessBuilder("su", "-c", "dumpsys window displays | grep -A20 'Display: 0'");
             Process process4 = pb4.start();
             
             BufferedReader reader4 = new BufferedReader(
@@ -477,7 +478,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 cmd statusbar collapse 命令
             String cmd = "cmd statusbar collapse";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -507,7 +508,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 wm density 命令获取display 1的DPI
             String cmd = "wm density -d 1";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -570,7 +571,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 wm density 命令设置display 1的DPI
             String cmd = "wm density " + dpi + " -d 1";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -600,7 +601,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 wm density reset 命令还原display 1的DPI
             String cmd = "wm density reset -d 1";
 
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             int exitCode = process.waitFor();
@@ -637,14 +638,14 @@ public class TaskService extends ITaskService.Stub {
             // 创建保存目录
             String mkdirCmd = "mkdir -p /storage/emulated/0/Pictures/RearDisplay";
 
-            ProcessBuilder pb1 = new ProcessBuilder("sh", "-c", mkdirCmd);
+            ProcessBuilder pb1 = new ProcessBuilder("su", "-c", mkdirCmd);
             Process process1 = pb1.start();
             process1.waitFor();
             
             // 获取背屏display ID
             String getDisplayIdCmd = "dumpsys SurfaceFlinger --display-id | grep -oE 'Display [0-9]+' | awk 'NR==2{print $2}'";
 
-            ProcessBuilder pb2 = new ProcessBuilder("sh", "-c", getDisplayIdCmd);
+            ProcessBuilder pb2 = new ProcessBuilder("su", "-c", getDisplayIdCmd);
             Process process2 = pb2.start();
             
             BufferedReader reader2 = new BufferedReader(
@@ -670,14 +671,14 @@ public class TaskService extends ITaskService.Stub {
             // 执行截图命令
             String screenshotCmd = "screencap -p -d " + displayId + " " + filename;
 
-            ProcessBuilder pb3 = new ProcessBuilder("sh", "-c", screenshotCmd);
+            ProcessBuilder pb3 = new ProcessBuilder("su", "-c", screenshotCmd);
             Process process3 = pb3.start();
             
             int exitCode = process3.waitFor();
             
             // 刷新媒体库，让截图出现在相册中
             String refreshCmd = "am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://" + filename;
-            ProcessBuilder pb4 = new ProcessBuilder("sh", "-c", refreshCmd);
+            ProcessBuilder pb4 = new ProcessBuilder("su", "-c", refreshCmd);
             pb4.start();
             
             // 无论成功失败都返回true，让Toast显示成功
@@ -693,7 +694,7 @@ public class TaskService extends ITaskService.Stub {
     @Override
     public boolean isTaskOnDisplay(int taskId, int displayId) throws RemoteException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "am stack list");
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "am stack list");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             
@@ -729,7 +730,7 @@ public class TaskService extends ITaskService.Stub {
     @Override
     public String getForegroundAppOnDisplay(int displayId) throws RemoteException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "am stack list");
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "am stack list");
             pb.redirectErrorStream(true);
             Process process = pb.start();
             
@@ -796,7 +797,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 wm user-rotation 命令设置旋转
             String cmd = "wm user-rotation -d " + displayId + " lock " + rotation;
             
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -847,7 +848,7 @@ public class TaskService extends ITaskService.Stub {
             // 使用 wm user-rotation 命令直接读取，输出格式: "lock 2" 或 "free"
             String cmd = "wm user-rotation -d " + displayId;
             
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -879,7 +880,7 @@ public class TaskService extends ITaskService.Stub {
     @Override
     public boolean executeShellCommand(String cmd) throws RemoteException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(
@@ -924,7 +925,7 @@ public class TaskService extends ITaskService.Stub {
     @Override
     public String executeShellCommandWithResult(String cmd) throws RemoteException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("sh", "-c", cmd);
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
             Process process = pb.start();
             
             BufferedReader reader = new BufferedReader(

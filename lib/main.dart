@@ -100,15 +100,15 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-enum ShizukuStatus { checking, running, error }
+enum RootStatus { checking, running, error }
 
 class _HomePageState extends State<HomePage> {
   static const platform = MethodChannel('com.display.switcher/task');
 
   // Status Enum
-  ShizukuStatus _shizukuStatus = ShizukuStatus.checking;
-  bool _shizukuRunning = false;
-  // String _statusMessage = 'Checking Shizuku...'; // Removed
+  RootStatus _rootStatus = RootStatus.checking;
+  bool _rootRunning = false;
+  // String _statusMessage = 'Checking Root...'; // Removed
   String _customErrorTitle = ''; // For specific error types
   bool _isLoading = false;
   bool _hasError = false; // 是否有错误
@@ -144,12 +144,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _checkShizuku();
+    _checkRoot();
     _loadSettings(); // 加载所有设置
     _setupMethodCallHandler();
     _loadProximitySensorSetting(); // 加载接近传感器设置
 
-    // 通知权限会在Shizuku授权完成后自动请求（见_checkShizuku）
+    // 通知权限会在Root授权完成后自动请求（见_checkRoot）
 
     // 延迟获取DPI和旋转，等待TaskService连接
     Future.delayed(const Duration(seconds: 2), () {
@@ -167,15 +167,15 @@ class _HomePageState extends State<HomePage> {
 
   void _setupMethodCallHandler() {
     platform.setMethodCallHandler((call) async {
-      if (call.method == 'onShizukuPermissionChanged') {
+      if (call.method == 'onRootPermissionChanged') {
         final granted = call.arguments as bool;
-        print('Shizuku permission changed: $granted');
+        print('Root permission changed: $granted');
         // 刷新状态
-        await _checkShizuku();
+        await _checkRoot();
 
-        // Shizuku授权完成后，立即请求通知权限
+        // Root授权完成后，立即请求通知权限
         if (granted) {
-          print('✓ Shizuku已授权，立即请求通知权限');
+          print('✓ Root已授权，立即请求通知权限');
           _requestNotificationPermission();
         }
       }
@@ -319,9 +319,9 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _checkShizuku() async {
+  Future<void> _checkRoot() async {
     setState(() {
-      _shizukuStatus = ShizukuStatus.checking;
+      _rootStatus = RootStatus.checking;
       _hasError = false;
       _errorDetail = '';
     });
@@ -335,23 +335,23 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
 
       setState(() {
-        _shizukuRunning = result == true;
+        _rootRunning = result == true;
         _hasError = false;
         _errorDetail = '';
 
-        if (_shizukuRunning) {
-          _shizukuStatus = ShizukuStatus.running;
+        if (_rootRunning) {
+          _rootStatus = RootStatus.running;
 
-          // Shizuku已授权，立即请求通知权限
-          print('✓ Shizuku已授权，立即请求通知权限');
+          // Root已授权，立即请求通知权限
+          print('✓ Root已授权，立即请求通知权限');
           _requestNotificationPermission();
         } else {
           _hasError = true;
-          _shizukuStatus = ShizukuStatus.error;
+          _rootStatus = RootStatus.error;
           _customErrorTitle = ''; // Use default "Permission Required"
           _errorDetail = AppLocalizations.of(
             context,
-          ).translate('shizuku_permission_denied');
+          ).translate('root_permission_denied');
           // 获取详细信息帮助诊断
           _getDetailedStatus();
         }
@@ -366,10 +366,10 @@ class _HomePageState extends State<HomePage> {
       if (errorMsg.contains('binder') || errorMsg.contains('Binder')) {
         errorType = AppLocalizations.of(
           context,
-        ).translate('error_shizuku_communication');
+        ).translate('error_root_communication');
         _errorDetail = AppLocalizations.of(
           context,
-        ).translate('error_shizuku_service_crashed');
+        ).translate('error_root_service_crashed');
       } else if (errorMsg.contains('permission') ||
           errorMsg.contains('Permission')) {
         errorType = AppLocalizations.of(
@@ -377,7 +377,7 @@ class _HomePageState extends State<HomePage> {
         ).translate('error_permission_denied');
         _errorDetail = AppLocalizations.of(
           context,
-        ).translate('error_grant_in_shizuku');
+        ).translate('error_grant_root');
       } else if (errorMsg.contains('RemoteException')) {
         errorType = AppLocalizations.of(
           context,
@@ -391,7 +391,7 @@ class _HomePageState extends State<HomePage> {
         ).translate('error_check_timeout');
         _errorDetail = AppLocalizations.of(
           context,
-        ).translate('error_shizuku_timeout');
+        ).translate('error_root_timeout');
       } else {
         errorType = AppLocalizations.of(context).translate('error_unknown');
         _errorDetail = errorMsg.length > 50
@@ -399,9 +399,9 @@ class _HomePageState extends State<HomePage> {
             : errorMsg;
       }
       setState(() {
-        _shizukuRunning = false;
+        _rootRunning = false;
         _hasError = true;
-        _shizukuStatus = ShizukuStatus.error;
+        _rootStatus = RootStatus.error;
         _customErrorTitle = errorType;
       });
     }
@@ -721,12 +721,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _getDisplayStatus(BuildContext context) {
-    switch (_shizukuStatus) {
-      case ShizukuStatus.checking:
-        return AppLocalizations.of(context).translate('check_shizuku');
-      case ShizukuStatus.running:
+    switch (_rootStatus) {
+      case RootStatus.checking:
+        return AppLocalizations.of(context).translate('check_root');
+      case RootStatus.running:
         return AppLocalizations.of(context).translate('status_ready');
-      case ShizukuStatus.error:
+      case RootStatus.error:
         return _customErrorTitle.isNotEmpty
             ? _customErrorTitle
             : AppLocalizations.of(context).translate('permission_required');
@@ -802,13 +802,13 @@ class _HomePageState extends State<HomePage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
-                                  _shizukuRunning
+                                  _rootRunning
                                       ? Icons.check_circle
                                       : (_hasError
                                             ? Icons.error_outline
                                             : Icons.warning_rounded),
                                   size: 28,
-                                  color: _shizukuRunning
+                                  color: _rootRunning
                                       ? Colors.green
                                       : (_hasError
                                             ? Colors.red
@@ -1962,8 +1962,8 @@ class _HomePageState extends State<HomePage> {
   Future<void> _setRotation(int rotation) async {
     print('[Flutter] 🔄 开始设置旋转: $rotation (${rotation * 90}°)');
 
-    if (!_shizukuRunning) {
-      print('[Flutter] ❌ Shizuku未运行');
+    if (!_rootRunning) {
+      print('[Flutter] ❌ Root未运行');
       return;
     }
     if (_isLoading) {

@@ -23,7 +23,6 @@ import android.service.quicksettings.Tile;
 import android.service.quicksettings.TileService;
 import android.util.Log;
 import android.widget.Toast;
-import rikka.shizuku.Shizuku;
 
 /**
  * Quick Settings Tile - 获取背屏截图
@@ -33,12 +32,7 @@ public class RearScreenshotTileService extends TileService {
     private static final String TAG = "RearScreenshotTile";
 
     private ITaskService taskService;
-    private final Shizuku.UserServiceArgs serviceArgs = new Shizuku.UserServiceArgs(
-            new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
 
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -142,17 +136,13 @@ public class RearScreenshotTileService extends TileService {
     }
 
     private void bindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             return;
         }
 
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.w(TAG, "Shizuku not available");
-                return;
-            }
-
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            android.content.Intent intent = new android.content.Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, android.content.Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "Failed to bind TaskService", e);
         }
@@ -162,8 +152,9 @@ public class RearScreenshotTileService extends TileService {
     public void onDestroy() {
         super.onDestroy();
         try {
-            if (taskService != null) {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+            if (taskServiceBound) {
+                unbindService(taskServiceConnection);
+                taskServiceBound = false;
                 taskService = null;
             }
         } catch (Exception e) {

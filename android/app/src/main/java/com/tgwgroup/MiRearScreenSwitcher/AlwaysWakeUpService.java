@@ -15,7 +15,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 
-import rikka.shizuku.Shizuku;
 
 /**
  * V3.5: 未投放应用时常亮服务
@@ -33,12 +32,7 @@ public class AlwaysWakeUpService extends Service {
     private boolean isRunning = false;
     private SharedPreferences prefs;
     
-    private final Shizuku.UserServiceArgs serviceArgs = 
-        new Shizuku.UserServiceArgs(new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("always_wakeup_task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
     
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -80,18 +74,14 @@ public class AlwaysWakeUpService extends Service {
     
     private void bindTaskService() {
         try {
-            if (taskService != null) {
+            if (taskServiceBound) {
                 Log.d(TAG, "TaskService already bound");
                 return;
             }
             
-            if (!Shizuku.pingBinder()) {
-                Log.w(TAG, "Shizuku not available");
-                return;
-            }
-            
             Log.d(TAG, "🔗 开始绑定TaskService...");
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "绑定TaskService失败", e);
         }
@@ -201,8 +191,9 @@ public class AlwaysWakeUpService extends Service {
         
         // 解绑TaskService
         try {
-            if (taskService != null) {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+            if (taskServiceBound) {
+                unbindService(taskServiceConnection);
+                taskServiceBound = false;
                 Log.d(TAG, "✓ TaskService unbound");
             }
         } catch (Exception e) {

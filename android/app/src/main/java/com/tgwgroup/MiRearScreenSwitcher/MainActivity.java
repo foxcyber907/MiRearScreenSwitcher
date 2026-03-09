@@ -33,8 +33,6 @@ import io.flutter.embedding.android.FlutterActivity;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.plugin.common.MethodChannel;
 
-import rikka.shizuku.Shizuku;
-
 public class MainActivity extends FlutterActivity {
     private static final String CHANNEL = "com.display.switcher/task";
     private static final String TAG = "MainActivity";
@@ -49,26 +47,22 @@ public class MainActivity extends FlutterActivity {
     
     private ITaskService taskService;
     private MethodChannel methodChannel;
-    private final Shizuku.UserServiceArgs serviceArgs = 
-        new Shizuku.UserServiceArgs(new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
     
-    // Shizuku监听器（关键！）
-    private final Shizuku.OnBinderReceivedListener binderReceivedListener = 
-        () -> {
-            bindTaskService();
-        };
-    
-    private final Shizuku.OnBinderDeadListener binderDeadListener = 
-        () -> {
-            taskService = null;
-            
-            // 启动重连任务
-            scheduleReconnectTaskService();
-        };
+    // Root模式监听器
+    private final Runnable checkRootRunnable = () -> {
+        new Thread(() -> {
+            boolean hasRoot = RootTaskService.isRootAvailable();
+            runOnUiThread(() -> {
+                if (hasRoot) {
+                    bindTaskService();
+                }
+                if (methodChannel != null) {
+                    methodChannel.invokeMethod("onRootPermissionChanged", hasRoot);
+                }
+            });
+        }).start();
+    };
     
     /**
      * TaskService重连任务
@@ -93,20 +87,6 @@ public class MainActivity extends FlutterActivity {
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(reconnectTaskServiceRunnable, 30);
     };
     
-    private final Shizuku.OnRequestPermissionResultListener requestPermissionResultListener = 
-        (requestCode, grantResult) -> {
-            boolean granted = grantResult == PackageManager.PERMISSION_GRANTED;
-            if (granted) {
-                bindTaskService();
-            }
-            // 通知Flutter刷新状态
-            if (methodChannel != null) {
-                runOnUiThread(() -> {
-                    methodChannel.invokeMethod("onShizukuPermissionChanged", granted);
-                });
-            }
-        };
-    
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
@@ -120,23 +100,16 @@ public class MainActivity extends FlutterActivity {
     };
     
     private void bindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             return;
         }
         
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.e(TAG, "Shizuku not available");
-                return;
-            }
-            
-            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "No Shizuku permission");
-                return;
-            }
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
+            taskServiceBound = true;
         } catch (Exception e) {
-            Log.e(TAG, "Failed to bind TaskService", e);
+            Log.e(TAG, "Failed to bind RootTaskService", e);
         }
     }
     
@@ -147,13 +120,8 @@ public class MainActivity extends FlutterActivity {
         // 保存实例
         currentInstance = this;
         
-        // 添加Shizuku监听器（关键！使用Sticky版本）
-        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
-        Shizuku.addBinderDeadListener(binderDeadListener);
-        Shizuku.addRequestPermissionResultListener(requestPermissionResultListener);
-        
-        // 自动检查并请求Shizuku权限
-        checkAndRequestShizukuPermission();
+        // 绑定RootTaskService
+        bindTaskService();
         
         // 处理通知Intent
         handleIncomingIntent(getIntent());
@@ -272,18 +240,8 @@ public class MainActivity extends FlutterActivity {
     }
     
     private void checkAndRequestShizukuPermission() {
-        try {
-            if (Shizuku.pingBinder()) {
-                if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                    Shizuku.requestPermission(0);
-                } else {
-                    bindTaskService();
-                }
-            } else {
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to check Shizuku permission", e);
-        }
+        // Root模式：直接绑定服务
+        bindTaskService();
     }
     
     @Override
@@ -293,9 +251,15 @@ public class MainActivity extends FlutterActivity {
         // 清除静态实例
         currentInstance = null;
         
-        Shizuku.removeBinderReceivedListener(binderReceivedListener);
-        Shizuku.removeBinderDeadListener(binderDeadListener);
-        Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener);
+        // 解绑RootTaskService
+        if (taskServiceBound) {
+            try {
+                unbindService(taskServiceConnection);
+            } catch (Exception e) {
+                Log.w(TAG, "Error unbinding RootTaskService", e);
+            }
+            taskServiceBound = false;
+        }
     }
     
     @Override
@@ -306,40 +270,39 @@ public class MainActivity extends FlutterActivity {
         methodChannel.setMethodCallHandler((call, result) -> {
                 switch (call.method) {
                     case "checkShizuku": {
-                        try {
-                            boolean isRunning = Shizuku.pingBinder();
-                            boolean hasPermission = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
-                            result.success(isRunning && hasPermission);
-                        } catch (Exception e) {
-                            result.success(false);
-                        }
+                        // Root模式：检查root权限和TaskService连接
+                        new Thread(() -> {
+                            boolean hasRoot = RootTaskService.isRootAvailable();
+                            boolean serviceReady = taskService != null;
+                            boolean ready = hasRoot && serviceReady;
+                            runOnUiThread(() -> result.success(ready));
+                        }).start();
                         break;
                     }
                     
                     case "requestShizukuPermission": {
-                        try {
-                            Shizuku.requestPermission(0);
-                            result.success(null);
-                        } catch (Exception e) {
-                            result.error("ERROR", e.getMessage(), null);
-                        }
+                        // Root模式：触发root授权弹窗
+                        new Thread(() -> {
+                            boolean hasRoot = RootTaskService.isRootAvailable();
+                            runOnUiThread(() -> {
+                                if (hasRoot) {
+                                    bindTaskService();
+                                }
+                                result.success(null);
+                            });
+                        }).start();
                         break;
                     }
                     
                     case "getShizukuInfo": {
-                        try {
-                            boolean isRunning = Shizuku.pingBinder();
-                            boolean hasPermission = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED;
-                            int uid = Shizuku.getUid();
-                            int version = Shizuku.getVersion();
-                            String info = "Running: " + isRunning + "\n" +
-                                         "Permission: " + hasPermission + "\n" +
-                                         "UID: " + uid + "\n" +
-                                         "Version: " + version;
-                            result.success(info);
-                        } catch (Exception e) {
-                            result.success("Error: " + e.getMessage());
-                        }
+                        // Root模式：返回root状态信息
+                        new Thread(() -> {
+                            boolean hasRoot = RootTaskService.isRootAvailable();
+                            boolean serviceReady = taskService != null;
+                            String info = "Root: " + hasRoot + "\n" +
+                                         "TaskService: " + (serviceReady ? "Connected" : "Disconnected");
+                            runOnUiThread(() -> result.success(info));
+                        }).start();
                         break;
                     }
                     

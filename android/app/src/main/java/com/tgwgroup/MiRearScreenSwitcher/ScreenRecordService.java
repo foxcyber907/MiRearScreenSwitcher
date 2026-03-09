@@ -38,7 +38,6 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
-import rikka.shizuku.Shizuku;
 
 /**
  * 背屏录屏服务
@@ -63,12 +62,7 @@ public class ScreenRecordService extends Service {
     
     // TaskService
     private ITaskService taskService;
-    private final Shizuku.UserServiceArgs serviceArgs = 
-        new Shizuku.UserServiceArgs(new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
     
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -128,24 +122,15 @@ public class ScreenRecordService extends Service {
     }
     
     private void bindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             Log.d(TAG, "TaskService已连接，跳过绑定");
             return;
         }
         
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.e(TAG, "❌ Shizuku不可用");
-                return;
-            }
-            
-            if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "❌ 无Shizuku权限");
-                return;
-            }
-            
             Log.d(TAG, "→ 正在绑定TaskService...");
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "❌ 绑定TaskService失败", e);
             e.printStackTrace();
@@ -504,7 +489,7 @@ public class ScreenRecordService extends Service {
                 
                 Log.d(TAG, "→ 执行录屏命令: " + recordCmd);
                 
-                // 通过TaskService执行（有Shizuku权限）
+                // 通过TaskService执行（有root权限）
                 boolean cmdSuccess = taskService.executeShellCommand(recordCmd);
                 Log.d(TAG, "命令执行结果: " + cmdSuccess);
                 
@@ -718,12 +703,13 @@ public class ScreenRecordService extends Service {
         }
         
         // 解绑TaskService
-        if (taskService != null) {
+        if (taskServiceBound) {
             try {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+                unbindService(taskServiceConnection);
             } catch (Exception e) {
                 Log.e(TAG, "解绑TaskService失败", e);
             }
+            taskServiceBound = false;
             taskService = null;
         }
         

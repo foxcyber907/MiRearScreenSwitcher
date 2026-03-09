@@ -40,7 +40,6 @@ import android.os.RemoteException;
 import android.util.Log;
 import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
-import rikka.shizuku.Shizuku;
 
 /**
  * 前台Service - 保持背屏常亮
@@ -60,6 +59,7 @@ public class RearScreenKeeperService extends Service implements SensorEventListe
     private static RearScreenKeeperService instance = null;
     private PowerManager.WakeLock wakeLock;
     private Handler handler;
+    private boolean taskServiceBound = false;
     private ITaskService taskService = null;
 
     // V12.3: 初始杀进程策略 - 只杀1次，不持续监控
@@ -234,7 +234,7 @@ public class RearScreenKeeperService extends Service implements SensorEventListe
 
             // 在后台线程执行耗时操作，不阻塞通知显示
             new Thread(() -> {
-                // 绑定Shizuku TaskService
+                // 绑定TaskService
                 bindTaskService();
 
                 // 初始化接近传感器
@@ -413,6 +413,7 @@ public class RearScreenKeeperService extends Service implements SensorEventListe
         public void onServiceDisconnected(ComponentName name) {
             Log.w(TAG, "⚠ TaskService disconnected - will attempt to reconnect");
             taskService = null;
+            taskServiceBound = false;
 
             // 启动重连任务
             scheduleReconnectTaskService();
@@ -445,22 +446,16 @@ public class RearScreenKeeperService extends Service implements SensorEventListe
     };
 
     /**
-     * 绑定Shizuku TaskService
+     * 绑定TaskService
      */
     private void bindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             return;
         }
 
         try {
-            Shizuku.UserServiceArgs args = new Shizuku.UserServiceArgs(
-                    new ComponentName(getPackageName(), TaskService.class.getName()))
-                    .daemon(false)
-                    .processNameSuffix("task_service")
-                    .debuggable(false)
-                    .version(1);
-
-            Shizuku.bindUserService(args, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "✗ Failed to bind TaskService", e);
         }
@@ -470,20 +465,13 @@ public class RearScreenKeeperService extends Service implements SensorEventListe
      * 解绑TaskService
      */
     private void unbindTaskService() {
-        if (taskService != null) {
+        if (taskServiceBound) {
             try {
-                Shizuku.unbindUserService(
-                        new Shizuku.UserServiceArgs(
-                                new ComponentName(getPackageName(), TaskService.class.getName()))
-                                .daemon(false)
-                                .processNameSuffix("task_service")
-                                .debuggable(false)
-                                .version(1),
-                        taskServiceConnection,
-                        true);
+                unbindService(taskServiceConnection);
             } catch (Exception e) {
                 Log.w(TAG, "Failed to unbind TaskService", e);
             }
+            taskServiceBound = false;
             taskService = null;
         }
     }

@@ -29,7 +29,7 @@ import android.os.IBinder;
 import android.os.Handler;
 import android.util.Log;
 
-import rikka.shizuku.Shizuku;
+
 
 /**
  * 充电状态监听服务
@@ -58,12 +58,7 @@ public class ChargingService extends Service {
         return instance != null ? instance.taskService : null;
     }
     
-    private final Shizuku.UserServiceArgs serviceArgs = 
-        new Shizuku.UserServiceArgs(new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("charging_task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
     
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
         @Override
@@ -92,22 +87,7 @@ public class ChargingService extends Service {
         }
     };
     
-    // Shizuku监听器
-    private final Shizuku.OnBinderReceivedListener binderReceivedListener = 
-        () -> {
-            Log.d(TAG, "Shizuku binder received");
-            bindTaskService();
-        };
-    
-    private final Shizuku.OnBinderDeadListener binderDeadListener = 
-        () -> {
-            Log.d(TAG, "Shizuku binder dead");
-            taskService = null;
-            // 尝试重连
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                bindTaskService();
-            }, 1000);
-        };
+
     
     // V3.5: 设置变化广播接收器
     private BroadcastReceiver settingsReceiver = new BroadcastReceiver() {
@@ -225,9 +205,7 @@ public class ChargingService extends Service {
         
         prefs = getSharedPreferences("mrss_settings", Context.MODE_PRIVATE);
         
-        // 添加Shizuku监听器
-        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
-        Shizuku.addBinderDeadListener(binderDeadListener);
+
         
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_POWER_CONNECTED);
@@ -307,17 +285,9 @@ public class ChargingService extends Service {
     
     private void bindTaskService() {
         try {
-            if (!Shizuku.pingBinder()) {
-                Log.w(TAG, "Shizuku not available");
-                return;
-            }
-            
-            if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                Log.w(TAG, "No Shizuku permission");
-                return;
-            }
-            
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            if (taskServiceBound) return;
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
             Log.d(TAG, "Binding TaskService...");
         } catch (Exception e) {
             Log.e(TAG, "Failed to bind TaskService", e);
@@ -486,13 +456,7 @@ public class ChargingService extends Service {
         // 清除静态实例
         instance = null;
         
-        // 移除Shizuku监听器
-        try {
-            Shizuku.removeBinderReceivedListener(binderReceivedListener);
-            Shizuku.removeBinderDeadListener(binderDeadListener);
-        } catch (Exception e) {
-            Log.e(TAG, "Error removing Shizuku listeners", e);
-        }
+
         
         try {
             unregisterReceiver(batteryReceiver);
@@ -519,8 +483,9 @@ public class ChargingService extends Service {
         
         // 解绑TaskService
         try {
-            if (taskService != null) {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+            if (taskServiceBound) {
+                unbindService(taskServiceConnection);
+                taskServiceBound = false;
                 taskService = null;
             }
         } catch (Exception e) {

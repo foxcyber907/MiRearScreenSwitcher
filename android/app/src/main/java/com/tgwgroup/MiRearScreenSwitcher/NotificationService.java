@@ -39,7 +39,6 @@ import android.util.Log;
 import java.util.HashSet;
 import java.util.Set;
 
-import rikka.shizuku.Shizuku;
 
 /**
  * 通知监听服务
@@ -84,13 +83,7 @@ public class NotificationService extends NotificationListenerService {
         }
     };
     
-    // Shizuku服务配置
-    private final Shizuku.UserServiceArgs serviceArgs = 
-        new Shizuku.UserServiceArgs(new ComponentName("com.tgwgroup.MiRearScreenSwitcher", TaskService.class.getName()))
-            .daemon(false)
-            .processNameSuffix("notification_task_service")
-            .debuggable(false)
-            .version(1);
+    private boolean taskServiceBound = false;
     
     // TaskService连接
     private final ServiceConnection taskServiceConnection = new ServiceConnection() {
@@ -120,22 +113,7 @@ public class NotificationService extends NotificationListenerService {
         }
     };
     
-    // Shizuku监听器
-    private final Shizuku.OnBinderReceivedListener binderReceivedListener = 
-        () -> {
-            Log.d(TAG, "Shizuku binder received");
-            bindTaskService();
-        };
-    
-    private final Shizuku.OnBinderDeadListener binderDeadListener = 
-        () -> {
-            Log.d(TAG, "Shizuku binder dead");
-            taskService = null;
-            // 尝试重连
-            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                bindTaskService();
-            }, 1000);
-        };
+
     
     @Override
     public void onCreate() {
@@ -157,10 +135,7 @@ public class NotificationService extends NotificationListenerService {
         }
         Log.d(TAG, "✓ 广播接收器已注册");
         
-        // 添加Shizuku监听器
-        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener);
-        Shizuku.addBinderDeadListener(binderDeadListener);
-        
+
         // 绑定TaskService
         bindTaskService();
         
@@ -181,18 +156,14 @@ public class NotificationService extends NotificationListenerService {
     
     private void bindTaskService() {
         try {
-            if (taskService != null) {
+            if (taskServiceBound) {
                 Log.d(TAG, "TaskService already bound");
                 return;
             }
             
-            if (!Shizuku.pingBinder()) {
-                Log.w(TAG, "Shizuku not available");
-                return;
-            }
-            
             Log.d(TAG, "🔗 开始绑定TaskService...");
-            Shizuku.bindUserService(serviceArgs, taskServiceConnection);
+            Intent intent = new Intent(this, RootTaskService.class);
+            taskServiceBound = bindService(intent, taskServiceConnection, Context.BIND_AUTO_CREATE);
         } catch (Exception e) {
             Log.e(TAG, "Failed to bind TaskService", e);
         }
@@ -725,18 +696,11 @@ public class NotificationService extends NotificationListenerService {
             Log.w(TAG, "Failed to unregister receiver", e);
         }
         
-        // 移除Shizuku监听器
-        try {
-            Shizuku.removeBinderReceivedListener(binderReceivedListener);
-            Shizuku.removeBinderDeadListener(binderDeadListener);
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to remove Shizuku listeners", e);
-        }
-        
         // 解绑TaskService
         try {
-            if (taskService != null) {
-                Shizuku.unbindUserService(serviceArgs, taskServiceConnection, true);
+            if (taskServiceBound) {
+                unbindService(taskServiceConnection);
+                taskServiceBound = false;
                 taskService = null;
             }
         } catch (Exception e) {

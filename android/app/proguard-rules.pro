@@ -1,6 +1,5 @@
-# Shizuku
--keep class rikka.shizuku.** { *; }
--keep class moe.shizuku.** { *; }
+# RootTaskService
+-keep class com.tgwgroup.MiRearScreenSwitcher.RootTaskService { *; }
 -keep class android.content.pm.** { *; }
 
 # AIDL
