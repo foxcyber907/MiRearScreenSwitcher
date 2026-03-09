@@ -17,24 +17,13 @@ import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 import io.flutter.app.FlutterApplication;
-import rikka.sui.Sui;
 
 /**
- * 自定义Application - 初始化Shizuku
+ * 自定义Application
  */
 public class MyApplication extends FlutterApplication {
     
     private static final String TAG = "MyApplication";
-    private static boolean isSui = false;
-    
-    static {
-        // 关键！在静态块中初始化Sui
-        try {
-            isSui = Sui.init("com.tgwgroup.MiRearScreenSwitcher");
-        } catch (Throwable e) {
-            Log.e(TAG, "Sui init failed", e);
-        }
-    }
     
     @Override
     protected void attachBaseContext(Context base) {
@@ -54,10 +43,6 @@ public class MyApplication extends FlutterApplication {
     @Override
     public void onCreate() {
         super.onCreate();
-    }
-    
-    public static boolean isSui() {
-        return isSui;
     }
 }
 
